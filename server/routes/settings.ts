@@ -15,6 +15,7 @@ import { extractByDotPath } from '../fetcher/article-images.js'
 import { getMonthlyUsage } from '../providers/translate/google-translate.js'
 import { getDeeplMonthlyUsage } from '../providers/translate/deepl.js'
 import { parseOrBadRequest } from '../lib/validation.js'
+import { setFeverCredentials, removeFeverCredentials, getFeverStatus } from './fever.js'
 
 const ProfileBody = z.object({
   account_name: z.string().optional(),
@@ -695,5 +696,31 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       const message = err instanceof Error ? err.message : 'Connection failed'
       reply.send({ ok: false, error: message })
     }
+  })
+
+  // --- Fever API credential management ---
+
+  const FeverBody = z.object({
+    password: z.string().min(1, 'password is required'),
+  })
+
+  api.get('/api/settings/fever', async (_request, reply) => {
+    reply.send(getFeverStatus())
+  })
+
+  api.post(
+    '/api/settings/fever',
+    { preHandler: [requireJson] },
+    async (request, reply) => {
+      const body = parseOrBadRequest(FeverBody, request.body, reply)
+      if (!body) return
+      setFeverCredentials(body.password)
+      reply.send(getFeverStatus())
+    },
+  )
+
+  api.delete('/api/settings/fever', async (_request, reply) => {
+    removeFeverCredentials()
+    reply.send({ ok: true })
   })
 }
