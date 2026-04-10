@@ -4,20 +4,23 @@ import { getDb } from '../db.js'
 import { getSetting } from '../db/settings.js'
 import { getFeeds, getCategories, markArticleSeen, markArticleBookmarked, markAllSeenByFeed, markAllSeenByCategory } from '../db.js'
 import { syncArticleFiltersToSearch } from '../search/sync.js'
+import { logger } from '../logger.js'
+
+const log = logger.child('fever')
 
 const FEVER_API_VERSION = 3
 const ITEMS_PER_PAGE = 50
+/** Rate-limit: max requests per minute per IP for the Fever endpoint */
+const FEVER_RATE_LIMIT_MAX = 60
 
 function md5(str: string): string {
   return createHash('md5').update(str).digest('hex')
 }
 
-export function setFeverCredentials(password: string): void {
-  const username = getFeverUsername()
-  if (!username) return
-  const hash = md5(`${username}:${password}`)
+export function setFeverCredentials(email: string, password: string): void {
+  const hash = md5(`${email}:${password}`)
   getDb().prepare("INSERT INTO settings (key, value) VALUES ('fever.api_key_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(hash)
-  getDb().prepare("INSERT INTO settings (key, value) VALUES ('fever.username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(username)
+  getDb().prepare("INSERT INTO settings (key, value) VALUES ('fever.username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(email)
 }
 
 export function removeFeverCredentials(): void {
@@ -30,14 +33,12 @@ export function getFeverStatus(): { configured: boolean; username: string | null
   return { configured: !!hash, username: username ?? null }
 }
 
-function getFeverUsername(): string | null {
-  const row = getDb().prepare('SELECT email FROM users LIMIT 1').get() as { email: string } | undefined
-  return row?.email ?? null
-}
-
 function verifyFeverAuth(apiKey: string): boolean {
   const stored = getSetting('fever.api_key_hash')
-  if (!stored) return false
+  if (!stored) {
+    log.debug('Fever auth attempted but no credentials configured')
+    return false
+  }
   return stored === apiKey
 }
 
@@ -258,7 +259,7 @@ export async function feverRoutes(app: FastifyInstance): Promise<void> {
   )
 
   // Fever API endpoint — all requests POST to /fever/
-  app.post('/fever/', async (request, reply) => {
+  app.post('/fever/', { config: { rateLimit: { max: FEVER_RATE_LIMIT_MAX, timeWindow: '1 minute' } } }, async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, string>
     const query = request.query as Record<string, string>
 

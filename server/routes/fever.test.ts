@@ -64,13 +64,15 @@ function seedFeedWithCategory() {
   return { cat, feed }
 }
 
-function seedArticle(feedId: number, overrides: Record<string, unknown> = {}) {
+type ArticleData = Parameters<typeof insertArticle>[0]
+
+function seedArticle(feedId: number, overrides: Partial<Omit<ArticleData, 'feed_id'>> = {}) {
   const id = insertArticle({
     feed_id: feedId,
     title: 'Test Article',
     url: `https://example.com/article/${Math.random()}`,
     published_at: null,
-    ...(overrides as Parameters<typeof insertArticle>[0]),
+    ...overrides,
   })
   return { id }
 }

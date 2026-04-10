@@ -8,7 +8,7 @@ import {
   purgeExpiredArticles,
   getDb,
 } from '../db.js'
-import { requireJson, getAuthUser } from '../auth.js'
+import { requireJson, getAuthUser, getAuthUserEmail } from '../auth.js'
 import { getAllModelValues, getModelValues } from '../../shared/models.js'
 import { assertSafeUrl } from '../fetcher/ssrf.js'
 import { extractByDotPath } from '../fetcher/article-images.js'
@@ -714,7 +714,12 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = parseOrBadRequest(FeverBody, request.body, reply)
       if (!body) return
-      setFeverCredentials(body.password)
+      const email = getAuthUserEmail(request)
+      if (!email) {
+        reply.status(400).send({ error: 'No user account found — create a user account before configuring the Fever API' })
+        return
+      }
+      setFeverCredentials(email, body.password)
       reply.send(getFeverStatus())
     },
   )

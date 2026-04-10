@@ -118,3 +118,19 @@ export function requireJson(
   }
   done()
 }
+
+/**
+ * Resolve the email address for the currently authenticated user.
+ * - JWT users: authUser is the email directly.
+ * - API key users: authUser is `apikey:<id>`, fall back to the single DB user.
+ * - AUTH_DISABLED: authUser is `local`, fall back to the single DB user.
+ * Returns null when no user exists in the database.
+ */
+export function getAuthUserEmail(request: FastifyRequest): string | null {
+  const authUser = request.authUser
+  if (authUser?.includes('@')) return authUser
+  // For API key auth and AUTH_DISABLED, look up the only user in the DB
+  const db = getDb()
+  const row = db.prepare('SELECT email FROM users LIMIT 1').get() as { email: string } | undefined
+  return row?.email ?? null
+}
